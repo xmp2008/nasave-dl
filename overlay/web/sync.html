@@ -1,0 +1,791 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div x-data="syncApp()" x-init="init()" class="container-main space-y-8 pb-20 pt-1">
+
+    <!-- Header -->
+    <div class="px-1 space-y-1">
+        <div class="flex items-start justify-between">
+            <h1 class="page-h1">订阅统计</h1>
+            <!-- Activation Status Badge -->
+            <div class="flex items-center">
+                <template x-if="$store.pro.isPro">
+                    <div
+                        class="px-2 py-1 rounded-full bg-primary/10 border border-primary/20 flex items-center gap-1.5 animate-in fade-in zoom-in duration-300">
+                        <i data-lucide="gem" class="w-3.5 h-3.5 text-primary"></i>
+                        <span class="text-[11px] font-bold uppercase tracking-tight text-primary">Pro 版</span>
+                    </div>
+                </template>
+                <template x-if="!$store.pro.isPro">
+                    <button @click="$store.pro.showModal = true; $nextTick(() => { lucide.createIcons(); document.getElementById('code-0')?.focus(); })"
+                        class="px-2.5 py-1 rounded-full bg-muted border border-border flex items-center gap-1.5 hover:bg-secondary transition-all group">
+                        <i data-lucide="gem"
+                            class="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary transition-colors"></i>
+                        <span
+                            class="text-[11px] font-bold uppercase tracking-tight text-muted-foreground group-hover:text-primary">升级
+                            Pro 版</span>
+                    </button>
+                </template>
+            </div>
+        </div>
+        <p class="text-sm text-muted-foreground">
+            🚀 自动下载频道主页、播放列表、收藏夹的视频或图集。
+        </p>
+    </div>
+
+    <!-- Stats Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-12 gap-8" x-data="{ 
+        get currentRangeData() {
+            return stats?.chart_data || [];
+        },
+        get currentMax() {
+            return Math.max(...this.currentRangeData.map(d => d.total || 0), 5);
+        }
+    }">
+        <!-- Chart Section -->
+        <div
+            class="md:col-span-8 rounded-xl border bg-card shadow-sm overflow-hidden flex flex-col group/chart border-primary/10">
+            <div class="p-6 pb-2 flex items-center justify-between">
+                <div class="flex items-center justify-between w-full">
+                    <div>
+                        <p class="text-[10px] text-muted-foreground font-medium uppercase tracking-widest opacity-70">
+                            最近 7 天下载趋势
+                        </p>
+                    </div>
+                    <!-- Legend Moved Right -->
+                    <div class="flex items-center gap-4">
+                        <div class="flex items-center gap-1.5">
+                            <div style="background-color:#60a5fa" class="w-1.5 h-1.5 rounded-full"></div>
+                            <span
+                                class="text-[10px] font-bold text-muted-foreground/80 lowercase tracking-wide">全部</span>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <div class="w-1.5 h-1.5 rounded-full bg-primary"></div>
+                            <span
+                                class="text-[10px] font-bold text-muted-foreground/80 lowercase tracking-wide">订阅</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex-1 min-h-[260px] relative px-6 pb-6 pt-4 mt-2">
+                <!-- SVG Chart (Shadcn UI Aesthetic - Area Chart Gradient) -->
+                <svg viewBox="0 0 400 120" class="w-full h-full preserve-3d overflow-visible"
+                    preserveAspectRatio="none">
+                    <defs>
+                        <!-- Mobile/Sub Gradient (primary) -->
+                        <linearGradient id="fillSub" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stop-color="hsl(var(--primary))" stop-opacity="0.8" />
+                            <stop offset="95%" stop-color="hsl(var(--primary))" stop-opacity="0.1" />
+                        </linearGradient>
+                        <!-- Desktop/Total Gradient (soft blue) -->
+                        <linearGradient id="fillTotal" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stop-color="#60a5fa" stop-opacity="0.5" />
+                            <stop offset="95%" stop-color="#60a5fa" stop-opacity="0.08" />
+                        </linearGradient>
+                    </defs>
+
+                    <!-- Horizontal Grid (CartesianGrid vertical={false}) -->
+                    <g class="stroke-muted/10" stroke-width="1">
+                        <line x1="0" y1="10" x2="400" y2="10" />
+                        <line x1="0" y1="36.6" x2="400" y2="36.6" />
+                        <line x1="0" y1="63.3" x2="400" y2="63.3" />
+                        <line x1="0" y1="90" x2="400" y2="90" />
+                    </g>
+
+                    <!-- Area Paths (StackId="a", Type="natural") -->
+                    <path :d="getChartPath('area', 'total')" fill="url(#fillTotal)" fill-opacity="0.6"
+                        class="transition-all duration-1000 ease-in-out" />
+                    <path :d="getChartPath('area', 'sub')" fill="url(#fillSub)" fill-opacity="0.4"
+                        class="transition-all duration-1000 ease-in-out" />
+
+                    <!-- Lines (Stroke) -->
+                    <path :d="getChartPath('line', 'total')" fill="none" stroke="#60a5fa" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round"
+                        class="transition-all duration-1000 ease-in-out" />
+                    <path :d="getChartPath('line', 'sub')" fill="none" stroke="hsl(var(--primary))" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round"
+                        class="transition-all duration-1000 ease-in-out" />
+
+                    <!-- XAxis -->
+                    <g x-html="getChartXLabels()"></g>
+                </svg>
+
+                <!-- Tooltip Interaction Layer -->
+                <div class="absolute left-6 right-6 top-4 bottom-6 pointer-events-none">
+                    <template x-for="(val, i) in currentRangeData" :key="i">
+                        <div class="absolute pointer-events-auto cursor-pointer group/point"
+                            :style="`left: ${currentRangeData.length !== 1 ? (i / (currentRangeData.length - 1)) * 100 : 50}%; top: ${((90 - ((val.total || 0) / currentMax * 80)) / 120) * 100}%; transform: translate(-50%, -50%);`">
+                            <!-- Dot -->
+                            <div class="w-2 h-2 rounded-full border-[1.5px] border-background shadow-sm transition-transform duration-300 group-hover/point:scale-150"
+                                :class="val.total !== 0 ? 'bg-primary' : 'bg-muted-foreground/40 text-opacity-40'"></div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <!-- Chart Footer Area (Legend and Divider removed) -->
+            <div class="mt-auto"></div>
+        </div>
+
+        <!-- Metric Cards -->
+        <div
+            class="md:col-span-4 rounded-xl border bg-card shadow-sm flex flex-col justify-between overflow-hidden relative group/info border-primary/5">
+            <div class="flex-1 relative z-10 flex flex-col">
+                <!-- Count Display (优化间距与字号) -->
+                <div class="flex-1 flex flex-col justify-center p-6 pb-2">
+                    <div class="grid grid-cols-2 gap-4 divide-x divide-border/40">
+                        <div class="text-center">
+                            <p class="text-[10px] font-black text-muted-foreground/60 uppercase tracking-widest mb-1">
+                                订阅/总任务</p>
+                            <div class="text-4xl font-black tracking-tighter flex items-center justify-center gap-1">
+                                <span class="text-primary" x-text="getRangeStats().sub">0</span>
+                                <span class="text-muted-foreground/20 text-4xl font-light">/</span>
+                                <span class="text-muted-foreground/40 text-4xl" x-text="getRangeStats().total">0</span>
+                            </div>
+                        </div>
+                        <div class="text-center">
+                            <p class="text-[10px] font-black text-rose-500/70 uppercase tracking-widest mb-1">失败任务</p>
+                            <div class="text-4xl font-black tracking-tighter text-rose-500/90"
+                                x-text="stats?.fail_7d || 0">0</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sync Times (px-4 handles lateral padding, change to px-6 to restore wider margins) -->
+                <div class="flex-1 flex flex-col justify-center px-8 pt-2 pb-6">
+                    <div class="space-y-4">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <div class="w-1.5 h-1.5 rounded-full bg-muted-foreground/40"></div>
+                                <span
+                                    class="text-[11px] font-bold text-muted-foreground/90 lowercase tracking-wide">上次同步时间</span>
+                            </div>
+                            <span class="text-xs font-black text-foreground/90 tabular-nums"
+                                x-text="stats?.last_syncs?.length > 0 ? formatTime(stats.last_syncs[0]) : '-'">-</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <div class="w-1.5 h-1.5 rounded-full bg-primary/60 animate-pulse"></div>
+                                <span
+                                    class="text-[11px] font-bold text-muted-foreground/90 lowercase tracking-wide">预计下次执行</span>
+                            </div>
+                            <span class="text-xs font-black text-primary tabular-nums"
+                                x-text="getNextSyncTime()">即将运行</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Soft Glows -->
+            <div
+                class="absolute -top-16 -right-16 w-32 h-32 bg-primary/5 rounded-full blur-3xl group-hover/info:bg-primary/10 transition-colors">
+            </div>
+            <div class="absolute -bottom-16 -left-16 w-32 h-32 bg-blue-500/5 rounded-full blur-3xl"></div>
+            <!-- Footer Actions -->
+            <div
+                class="px-6 py-4 bg-muted/30 border-t border-border/50 relative z-10 flex items-center justify-between">
+                <button @click="resetDatabase()" title="重置数据库"
+                    class="w-10 h-10 rounded-xl flex items-center justify-center text-muted-foreground/60 bg-muted border border-border/50 hover:bg-rose-500/10 hover:text-rose-500 hover:border-rose-500/20 transition-all active:scale-90">
+                    <i data-lucide="shredder" class="w-5 h-5"></i>
+                </button>
+
+                <button @click="syncAllActive()"
+                    class="flex-1 ml-4 h-10 rounded-xl bg-primary/10 text-primary text-[11px] font-black uppercase tracking-widest hover:bg-primary hover:text-white transition-all flex items-center justify-center gap-2 group">
+                    <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                    更新所有订阅
+                </button>
+            </div>
+            <!-- Background Decal -->
+            <div class="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -mr-16 -mt-16 blur-3xl"></div>
+            <div class="absolute bottom-0 left-0 w-24 h-24 bg-blue-500/5 rounded-full -ml-12 -mb-12 blur-2xl"></div>
+        </div>
+    </div>
+
+    <!-- Subscription List Header -->
+    <div class="flex items-center justify-between px-1">
+        <h2 class="page-h1 !mb-0">订阅列表</h2>
+
+        <div class="flex items-center gap-3">
+            <!-- Batch Actions -->
+            <div x-show="selectedIds.length > 0" x-transition
+                class="flex items-center gap-2 pr-4 border-r border-border/50">
+                <button @click="batchAction('start')" title="批量启用"
+                    class="w-9 h-9 rounded-xl flex items-center justify-center text-green-500 bg-green-500/10 hover:bg-green-500 hover:text-white transition-all active:scale-90">
+                    <i data-lucide="play" class="w-4 h-4 fill-current"></i>
+                </button>
+                <button @click="batchAction('stop')" title="批量暂停"
+                    class="w-9 h-9 rounded-xl flex items-center justify-center text-orange-500 bg-orange-500/10 hover:bg-orange-500 hover:text-white transition-all active:scale-90">
+                    <i data-lucide="pause" class="w-4 h-4 fill-current"></i>
+                </button>
+                <button @click="batchAction('delete')" title="批量删除"
+                    class="w-9 h-9 rounded-xl flex items-center justify-center text-rose-500 bg-rose-500/10 hover:bg-rose-500 hover:text-white transition-all active:scale-90">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
+            </div>
+
+            <button @click="openAddModal()"
+                class="inline-flex items-center justify-center rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 gap-2 disabled:opacity-50 disabled:grayscale transition-all">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+                <span x-text="'新建订阅 (' + subs.length + ')'"></span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Subscription Tasks List (Shadcn Task Style) -->
+    <div class="rounded-xl border bg-card shadow-sm overflow-hidden min-h-[400px]">
+        <!-- Table Header -->
+        <div
+            class="grid grid-cols-[40px_60px_1fr_55px_45px] md:grid-cols-[40px_100px_1fr_140px_100px_80px_60px] gap-2 md:gap-4 px-3 md:px-6 py-4 text-[10px] font-black text-muted-foreground/50 bg-muted/20 uppercase tracking-[0.2em] border-b border-l-2 border-l-transparent">
+            <div class="flex justify-center">
+                <input type="checkbox" @change="toggleSelectAll($event.target.checked)" :checked="isAllSelected"
+                    class="w-4 h-4 rounded border-input text-primary focus:ring-primary/20">
+            </div>
+            <div class="flex justify-center">视频平台</div>
+            <div>订阅名称</div>
+            <div class="hidden md:flex md:justify-start">下载模板</div>
+            <div class="hidden md:flex md:justify-center">同步间隔</div>
+            <div class="flex justify-center">开关</div>
+            <div class="flex justify-center">编辑</div>
+        </div>
+
+        <div class="divide-y divide-border/40">
+
+            <template x-for="sub in paginatedSubs" :key="sub.id">
+                <div
+                    class="group grid grid-cols-[40px_60px_1fr_55px_45px] md:grid-cols-[40px_100px_1fr_140px_100px_80px_60px] gap-2 md:gap-4 items-center px-3 md:px-6 py-4 hover:bg-muted/5 transition-all border-l-2 border-transparent hover:border-primary/40">
+                    <!-- Checkbox -->
+                    <div class="flex justify-center">
+                        <input type="checkbox" :value="sub.id" x-model="selectedIds"
+                            class="w-4 h-4 rounded border-input text-primary focus:ring-primary/20">
+                    </div>
+
+                    <!-- Platform Capsule -->
+                    <div class="flex justify-center">
+                        <span class="badge border shrink-0 transition-all shadow-sm scale-75 md:scale-95 origin-center"
+                            :class="badgeClass(sub.url)" x-text="formatSite(sub.url)"></span>
+                    </div>
+
+                    <!-- Name (Always) -->
+                    <div class="min-w-0">
+                        <span class="font-bold text-sm md:text-base tracking-tight truncate block"
+                            x-text="sub.name"></span>
+                    </div>
+
+                    <!-- Quality Template (Desktop) -->
+                    <div class="hidden md:block">
+                        <span class="inline-flex items-center gap-1.5 text-[11px] font-bold text-muted-foreground/80">
+                            <div class="w-1.5 h-1.5 rounded-full bg-primary/40"></div>
+                            <span x-text="getTplName(sub.tpl_id) || '加载中...'"></span>
+                        </span>
+                    </div>
+
+                    <!-- Sync Interval (Desktop) -->
+                    <div class="hidden md:block text-center">
+                        <span class="text-[11px] font-black text-muted-foreground/60"
+                            x-text="formatInterval(sub.interval)"></span>
+                    </div>
+
+                    <!-- Status Toggle (Always) -->
+                    <div class="flex justify-center">
+                        <button @click="toggleSubStatus(sub)"
+                            class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 focus-visible:outline-none px-0.5"
+                            :class="sub.status === 'active' ? 'bg-primary' : 'bg-muted-foreground/30'">
+                            <span
+                                class="pointer-events-none block h-5 w-5 rounded-full bg-background shadow-md transition-transform duration-200 transform"
+                                :class="sub.status === 'active' ? 'translate-x-5' : 'translate-x-0'"></span>
+                        </button>
+                    </div>
+
+                    <!-- Actions: Edit/Delete (Always) -->
+                    <div class="flex justify-center">
+                        <div class="relative" x-data="{ open: false }">
+                            <button @click="open = !open" @click.away="open = false"
+                                class="w-9 h-9 rounded-xl flex items-center justify-center text-muted-foreground hover:bg-secondary transition-colors border border-transparent hover:border-border/50 bg-muted/20 md:bg-transparent">
+                                <i data-lucide="more-horizontal" class="w-4 h-4"></i>
+                            </button>
+                            <div x-show="open" x-cloak x-transition
+                                class="absolute right-0 mt-2 w-32 rounded-xl border bg-popover/95 backdrop-blur-sm text-popover-foreground shadow-2xl z-50 py-1 overflow-hidden ring-1 ring-black/5">
+                                <button @click="open = false; syncSub(sub.id)"
+                                    class="w-full px-3 py-2 text-xs font-semibold hover:bg-primary/5 hover:text-primary flex items-center justify-center gap-2 transition-colors">
+                                    <i data-lucide="refresh-cw" class="w-4 h-4 opacity-60"></i>
+                                    立即更新
+                                </button>
+                                <button @click="open = false; editSub(sub)"
+                                    class="w-full px-3 py-2 text-xs font-semibold hover:bg-primary/5 hover:text-primary flex items-center justify-center gap-2 transition-colors border-t border-border/40">
+                                    <i data-lucide="settings-2" class="w-4 h-4 opacity-60"></i>
+                                    修改订阅
+                                </button>
+                                <button @click="open = false; confirmDelete(sub.id)"
+                                    class="w-full px-3 py-2 text-xs font-semibold text-rose-500 hover:bg-rose-500/10 flex items-center justify-center gap-2 transition-colors border-t border-border/40">
+                                    <i data-lucide="trash-2" class="w-4 h-4 opacity-60"></i>
+                                    删除订阅
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </template>
+
+            <template x-if="subs.length === 0">
+                <div class="py-24 text-center space-y-4">
+                    <div class="w-16 h-16 bg-muted/40 rounded-full flex items-center justify-center mx-auto">
+                        <i data-lucide="rss" class="w-8 h-8 text-muted-foreground opacity-20"></i>
+                    </div>
+                    <div class="space-y-1">
+                        <p class="text-sm font-medium">暂无订阅内容</p>
+                        <p class="text-xs text-muted-foreground">点右上角添加第一个自动下载订阅</p>
+                    </div>
+                </div>
+            </template>
+
+            <!-- Pagination -->
+            <div x-show="subs.length > 20"
+                class="flex items-center justify-center gap-4 py-6 border-t border-border/10">
+                <button @click="page > 1 ? page-- : null" :disabled="page === 1"
+                    class="h-9 px-4 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors hover:bg-secondary disabled:opacity-30 disabled:pointer-events-none">
+                    <i data-lucide="chevron-left" class="w-4 h-4"></i> 上一页
+                </button>
+                <div class="text-sm font-bold text-muted-foreground/60">
+                    <span x-text="page" class="text-primary"></span>
+                    <span class="mx-1">/</span>
+                    <span x-text="Math.ceil(subs.length / 20)"></span>
+                </div>
+                <button @click="page < Math.ceil(subs.length / 20) ? page++ : null"
+                    :disabled="page >= Math.ceil(subs.length / 20)"
+                    class="h-9 px-4 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors hover:bg-secondary disabled:opacity-30 disabled:pointer-events-none">
+                    下一页 <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Add Modal -->
+        <div x-show="showAddModal" x-cloak
+            class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+            x-transition:enter="transition duration-300" x-transition:enter-start="opacity-0 scale-95"
+            x-transition:enter-end="opacity-100 scale-100">
+            <div class="bg-card w-full max-w-lg rounded-2xl shadow-2xl border border-border overflow-hidden"
+                @click.away="showAddModal = false">
+                <div class="p-6 border-b flex items-center justify-between bg-muted/10">
+                    <h2 class="card-h1" x-text="editId ? '编辑订阅' : '新建订阅'"></h2>
+                    <button @click="showAddModal = false" class="p-1 hover:bg-muted rounded-full transition-colors">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+
+                <form @submit.prevent="saveSub" class="p-6 space-y-6">
+                    <div class="space-y-2">
+                        <label class="text-xs font-bold text-muted-foreground uppercase tracking-wider">订阅名称</label>
+                        <input type="text" x-model="subscriptionForm.name" required placeholder="例如：我的 B 站收藏夹"
+                            class="w-full h-11 px-4 rounded-xl border border-input bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all">
+                    </div>
+
+                    <div class="space-y-2">
+                        <label class="text-xs font-bold text-muted-foreground uppercase tracking-wider">订阅链接
+                            URL</label>
+                        <input type="url" x-model="subscriptionForm.url" required placeholder="主页/播放列表/收藏夹/图集页链接，支持 B站·抖音·快手·小红书·YouTube·TikTok·微博·Twitter·Instagram 等全平台"
+                            class="w-full h-11 px-4 rounded-xl border border-input bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all">
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="space-y-2">
+                            <label class="text-xs font-bold text-muted-foreground uppercase tracking-wider">下载模板</label>
+                            <select x-model="subscriptionForm.tpl_id"
+                                class="w-full h-11 px-3 rounded-xl border border-input bg-background outline-none">
+                                <template x-for="t in templates" :key="t.id">
+                                    <option :value="t.id" x-text="t.name"></option>
+                                </template>
+                            </select>
+                        </div>
+                        <div class="space-y-2">
+                            <label class="text-xs font-bold text-muted-foreground uppercase tracking-wider">同步间隔</label>
+                            <select x-model="subscriptionForm.interval"
+                                class="w-full h-11 px-3 rounded-xl border border-input bg-background outline-none">
+                                <option value="15">15 分钟</option>
+                                <option value="30">30 分钟</option>
+                                <option value="60">60 分钟</option>
+                                <option value="120">2 小时</option>
+                                <option value="360">6 小时</option>
+                                <option value="720">12 小时</option>
+                                <option value="1440">24 小时</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="pt-4 border-t flex gap-3">
+                        <button type="button" @click="showAddModal = false"
+                            class="flex-1 py-3 rounded-xl border font-semibold hover:bg-muted transition-colors">取消</button>
+                        <button type="submit" :disabled="saving"
+                            class="flex-1 py-3 rounded-xl bg-primary text-white font-semibold hover:bg-primary/90 transition-all disabled:opacity-50">
+                            <span x-show="!saving" x-text="editId ? '保存' : '确认'"></span>
+                            <span x-show="saving">处理中...</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function syncApp() {
+        return {
+            subs: [],
+            stats: { total_24h: 0, sub_24h: 0, total_7d: 0, sub_7d: 0, fail_all: 0, fail_7d: 0, last_syncs: [], chart_data: [] },
+            chartRange: '7d', // 默认 7 天
+            templates: [],
+            selectedIds: [],
+            showAddModal: false,
+            saving: false,
+            editId: null,
+            page: 1,
+            subscriptionForm: { name: '', url: '', tpl_id: 1, interval: 30, status: 'active' },
+
+            get paginatedSubs() {
+                const start = (this.page - 1) * 20;
+                return this.subs.slice(start, start + 20);
+            },
+
+            get filteredSubs() {
+                return this.subs;
+            },
+
+            get isAllSelected() {
+                return this.filteredSubs.length > 0 && this.selectedIds.length === this.filteredSubs.length;
+            },
+
+            toggleSelectAll(checked) {
+                if (checked) {
+                    this.selectedIds = this.filteredSubs.map(s => s.id);
+                } else {
+                    this.selectedIds = [];
+                }
+            },
+
+            async batchAction(action) {
+                if (!confirm(`确定要批量 [${action === 'start' ? '开启' : action === 'stop' ? '暂停' : '删除'}] 所选订阅吗？`)) return;
+                try {
+                    if (action === 'delete') {
+                        // 官方 batch 接口仅支持暂停/恢复，删除走单个 DELETE（无门槛）
+                        await Promise.all(this.selectedIds.map(id =>
+                            fetchAPI(`/api/subs/${id}`, { method: 'DELETE' })));
+                    } else {
+                        await fetchAPI('/api/subs/batch', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ action, ids: this.selectedIds })
+                        });
+                    }
+                    this.selectedIds = [];
+                    await this.loadSubs();
+                } catch (e) {
+                    alert('操作失败: ' + e.message);
+                }
+            },
+
+            getRangeStats() {
+                const s = this.stats || {};
+                return { total: s.total_7d || 0, sub: s.sub_7d || 0 };
+            },
+
+            getChartPath(type, key = 'total') {
+                const data = this.stats?.chart_data || [];
+                if (data.length === 0) return '';
+
+                const range = data.slice(-7) || [];
+                // Calculate max from total to maintain scale for both lines
+                const max = Math.max(...range.map(d => d.total || 0), 5);
+                const width = 400;
+                const height = 100;
+                const step = width / (range.length - 1);
+
+                const points = range.map((d, i) => ({
+                    x: i * step,
+                    y: height - ((d[key] || 0) / max * 80) - 10
+                }));
+
+                // Natural Monotone Spline approximation using Cubic Bezier
+                const getSmoothPath = (pts) => {
+                    if (pts.length < 2) return '';
+                    let d = `M ${pts[0].x},${pts[0].y}`;
+                    for (let i = 0; i < pts.length - 1; i++) {
+                        const p0 = pts[i];
+                        const p1 = pts[i + 1];
+                        // Smoothing factor
+                        const cp1x = p0.x + (p1.x - p0.x) / 3;
+                        const cp2x = p1.x - (p1.x - p0.x) / 3;
+                        d += ` C ${cp1x},${p0.y} ${cp2x},${p1.y} ${p1.x},${p1.y}`;
+                    }
+                    return d;
+                };
+
+                const spline = getSmoothPath(points);
+                if (type === 'line') return spline;
+
+                // Area path: start at bottom-left, spline to top, end at bottom-right, close
+                return `${spline} L ${points[points.length - 1].x},${height} L ${points[0].x},${height} Z`;
+            },
+
+            getChartXLabels() {
+                const data = this.currentRangeData;
+                if (!data || data.length === 0) return '';
+                const count = data.length;
+                return data.map((val, i) => {
+                    const x = count !== 1 ? (i / (count - 1)) * 400 : 200;
+                    return `<text x="${x}" y="115" text-anchor="middle" font-size="7" class="fill-muted-foreground/60">${val.date}</text>`;
+                }).join('');
+            },
+
+            getNextSyncTime() {
+                const subs = this.subs.filter(s => s.status === 'active');
+                if (subs.length === 0) return '尚未运行';
+
+                const now = new Date();
+                const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+                const secondsSinceMidnight = (now.getTime() - midnight) / 1000;
+
+                const nextRuns = subs.map(s => {
+                    const intervalSeconds = s.interval * 60;
+                    const nextIdx = Math.floor(secondsSinceMidnight / intervalSeconds) + 1;
+                    return midnight + (nextIdx * intervalSeconds * 1000);
+                });
+
+                const minNext = Math.min(...nextRuns);
+
+                const diff = (minNext - Date.now()) / 1000;
+                if (diff < 60) return '1 分钟内';
+                if (diff < 3600) return `${Math.floor(diff / 60)} 分钟后`;
+                return `${Math.floor(diff / 3600)} 小时后`;
+            },
+            async init() {
+                // 并行加载，互不阻塞
+                this.loadTemplates();
+                this.loadSubs();
+                this.loadStats();
+                Alpine.store('pro').load();
+
+                this.$nextTick(() => lucide.createIcons());
+
+                // 定时刷新统计和列表
+                setInterval(() => {
+                    this.loadStats();
+                    this.loadSubs();
+                }, 15000);
+            },
+
+            async loadStats() {
+                try {
+                    const res = await fetchAPI('/api/stats?_t=' + Date.now());
+                    if (res && res.data) {
+                        // 使用新数据完全替换旧数据，避免合并导致空点存留
+                        this.stats = res.data;
+                    }
+                } catch (e) {
+                    console.error("加载统计失败:", e);
+                }
+            },
+
+            async loadSubs() {
+                try {
+                    const res = await fetchAPI('/api/subs?_t=' + Date.now());
+                    this.subs = res.data;
+                    this.$nextTick(() => lucide.createIcons());
+                } catch (e) {
+                    console.error("加载订阅失败:", e);
+                }
+            },
+
+            async toggleSubStatus(sub) {
+                const newStatus = sub.status === 'active' ? 'disabled' : 'active';
+                try {
+                    await fetchAPI(`/api/subs/${sub.id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            ...sub,
+                            status: newStatus
+                        })
+                    });
+                    sub.status = newStatus;
+                } catch (e) {
+                    alert('切换失败: ' + e.message);
+                }
+            },
+
+            async loadTemplates() {
+                try {
+                    const res = await fetchAPI('/api/tpl');
+                    this.templates = res.data;
+                    if (this.templates.length > 0) {
+                        this.subscriptionForm.tpl_id = this.templates[0].id;
+                    }
+                } catch (e) { }
+            },
+
+            getTplName(id) {
+                const t = this.templates.find(t => t.id === id);
+                return t ? t.name : null;
+            },
+
+            openAddModal() {
+                this.editId = null;
+                this.subscriptionForm = { name: '', url: '', tpl_id: this.templates[0]?.id || 1, interval: 30, status: 'active' };
+                this.showAddModal = true;
+                this.$nextTick(() => lucide.createIcons());
+            },
+
+            editSub(sub) {
+                this.editId = sub.id;
+                this.subscriptionForm = {
+                    name: sub.name,
+                    url: sub.url,
+                    tpl_id: sub.tpl_id,
+                    interval: sub.interval,
+                    status: sub.status
+                };
+                this.showAddModal = true;
+                this.$nextTick(() => lucide.createIcons());
+            },
+
+            async saveSub() {
+                this.saving = true;
+                // 默认保存即开启该订阅
+                this.subscriptionForm.status = 'active';
+                try {
+                    if (this.editId) {
+                        await fetchAPI(`/api/subs/${this.editId}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(this.subscriptionForm)
+                        });
+                    } else {
+                        // 旁路创建：官方 POST /api/subs 免费版 403，改走 sidecar 直写数据库
+                        // sidecar 与主程序同宿主，端口固定 8890（见 docker-compose.yml）
+                        const base = location.protocol + '//' + location.hostname + ':8890';
+                        const res = await fetch(base + '/bypass/subs', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(this.subscriptionForm)
+                        });
+                        if (!res.ok) {
+                            let msg = 'HTTP ' + res.status;
+                            try { msg = (await res.json()).msg || msg; } catch (e) { }
+                            throw new Error(msg);
+                        }
+                    }
+                    this.showAddModal = false;
+                    await this.loadSubs();
+                    this.$nextTick(() => lucide.createIcons());
+                } catch (e) {
+                    alert('保存失败: ' + e.message);
+                }
+                this.saving = false;
+            },
+
+            async resetDatabase() {
+                if (!confirm('🚨 确定要重置数据库吗？\n⚠️ 清空所有任务记录，保留订阅配置。')) return;
+                try {
+                    await fetchAPI('/api/stats/reset', { method: 'DELETE' });
+                    await this.loadStats();
+                    alert('数据库已重置');
+                } catch (e) {
+                    alert('操作失败: ' + e.message);
+                }
+            },
+
+            async syncAllActive() {
+                try {
+                    await fetchAPI('/api/subs/sync-all', { method: 'POST' });
+                    alert('已手动执行！');
+                    // 触发后立即刷新一次，虽然可能还没下载完，但上次同步时间应该更新了
+                    setTimeout(() => {
+                        this.loadSubs();
+                        this.loadStats();
+                    }, 500);
+                } catch (e) {
+                    alert('触发失败: ' + e.message);
+                }
+            },
+
+            async syncSub(id) {
+                try {
+                    await fetchAPI(`/api/subs/${id}/sync`, { method: 'POST' });
+                    // 局部更新视觉反馈可以根据需要加
+                } catch (e) { }
+            },
+
+            async confirmDelete(id) {
+                if (!confirm('确定要删除这个订阅吗？已下载的任务将保留。')) return;
+                try {
+                    await fetchAPI(`/api/subs/${id}`, { method: 'DELETE' });
+                    this.loadSubs();
+                } catch (e) { }
+            },
+
+            formatDate(str) {
+                if (!str) return '未知';
+                const date = new Date(str);
+                return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`;
+            },
+
+            formatTime(str) {
+                if (!str) return '从未同步';
+                const date = new Date(str);
+                const now = new Date();
+                const diff = (now - date) / 1000;
+
+                if (diff < 60) return '刚刚';
+                if (diff < 3600) return `${Math.floor(diff / 60)} 分钟前`;
+                if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`;
+                if (diff < 2592000) return `${Math.floor(diff / 86400)} 天前`;
+                return `${Math.floor(diff / 2592000)} 个月前`;
+            },
+
+            formatInterval(m) {
+                if (m < 60) return m + ' 分钟';
+                if (m === 60) return '60 分钟';
+                return (m / 60) + ' 小时';
+            },
+
+            badgeClass(url) {
+                const site = this.formatSite(url).toLowerCase();
+                return {
+                    'badge-tiktok': site.includes('tiktok') || site.includes('抖音'),
+                    'badge-bilibili': site.includes('bilibili') || site.includes('b站') || site.includes('哔哩哔哩'),
+                    'badge-xhs': site.includes('xhs') || site.includes('xiaohongshu') || site.includes('小红书'),
+                    'badge-instagram': site.includes('instagram'),
+                    'badge-youtube': site.includes('youtube'),
+                    'badge-twitter': site.includes('twitter'),
+                    'badge-weibo': site.includes('weibo') || site.includes('微博'),
+                    'badge-pixiv': site.includes('pixiv'),
+                    'badge-pornhub': site.includes('pornhub'),
+                    'badge-vimeo': site.includes('vimeo'),
+                    'badge-default': !['tiktok', 'douyin', 'bilibili', 'xhs', 'xiaohongshu', 'youtube', 'instagram', 'twitter', 'weibo', 'pixiv', 'pornhub', 'vimeo', '哔哩哔哩', '抖音', '小红书', '微博'].some(s => site.includes(s))
+                };
+            },
+
+            formatSite(url) {
+                if (!url) return '网络资源';
+                const u = url.toLowerCase();
+                if (u.includes('youtube.com') || u.includes('youtu.be')) return 'YouTube';
+                if (u.includes('bilibili.com') || u.includes('b23.tv')) return '哔哩哔哩';
+                if (u.includes('douyin.com') || u.includes('iesdouyin.com')) return '抖音';
+                if (u.includes('tiktok.com')) return 'TikTok';
+                if (u.includes('kuaishou.com')) return '快手';
+                if (u.includes('xiaohongshu.com') || u.includes('xhslink.com')) return '小红书';
+                if (u.includes('weibo.com') || u.includes('weibo.cn')) return '微博';
+                if (u.includes('twitter.com') || u.includes('x.com')) return 'Twitter';
+                if (u.includes('instagram.com')) return 'Instagram';
+                if (u.includes('pixiv.net')) return 'Pixiv';
+                if (u.includes('acfun.cn')) return 'AcFun';
+                if (u.includes('pornhub.com')) return 'Pornhub';
+                if (u.includes('vimeo.com')) return 'Vimeo';
+                return '网络资源';
+            },
+        }
+    }
+</script>
+{% endblock %}
