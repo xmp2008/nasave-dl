@@ -1,0 +1,32 @@
+services:
+  nasave-dl:
+    image: ghcr.chenby.cn/juneix/nasave-dl:latest
+    container_name: nasave-dl-multi
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Shanghai
+    # 官方 run.py 写死 8888（PORT 变量无效），用独立网段避免与生产 host 网络撞端口
+    ports:
+      - "8889:8888" # 测试入口 http://10.0.0.3:8889，生产仍走 8888
+    volumes:
+      - /share/homes/Container/nasave-dl-multi/data:/app/data # 独立数据卷，不碰生产
+      - /share/Download/nasave-dl-multi:/downloads # 下载落数据盘
+      - /share/homes/Container/nasave-dl-multi/web/sync.html:/app/web/sync.html:ro # UI 补丁覆盖
+      - /etc/machine-id:/host/etc/machine-id:ro # 机器码（激活校验用）
+  subs-bypass:
+    image: ghcr.chenby.cn/juneix/nasave-dl:latest # 复用官方镜像自带的 Python3.11，免拉新镜像
+    container_name: nasave-bypass
+    restart: unless-stopped
+    command: python3 -u /srv/subs_bypass.py
+    environment:
+      - TZ=Asia/Shanghai
+      - BYPASS_PORT=8890
+      - NASAVE_DB=/app/data/nasave-dl.db
+      - NASAVE_MAIN=http://nasave-dl:8888 # stack 内网直连主程序（首次同步回调）
+    depends_on:
+      - nasave-dl
+    ports:
+      - "8890:8890" # 浏览器 UI 旁路创建入口
+    volumes:
+      - /share/homes/Container/nasave-dl-multi/data:/app/data # 与主程序共享同一个 SQLite（WAL 直写）
+      - /share/homes/Container/nasave-dl-multi/subs_bypass.py:/srv/subs_bypass.py:ro
